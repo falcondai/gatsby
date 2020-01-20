@@ -122,10 +122,64 @@ function handleMany(siftArgs, nodes, sort, resolvedFields) {
  * @returns Collection of results. Collection will be limited to size
  *   if `firstOnly` is true
  */
+let resolvedTypes = new Set
+
 const runSift = (args: Object) => {
   const { getNode, addResolvedNodes, getResolvedNode } = require(`./nodes`)
 
   const { nodeTypeNames } = args
+
+  let shortcut
+
+  try {
+    // console.log('0/5 args.queryArgs?.filter', args.queryArgs?.filter)
+    if (
+      args.queryArgs?.filter
+    ) {
+      // console.log('1/5 there is a filter', args.queryArgs.filter)
+      const filterProps = Object.getOwnPropertyNames(args.queryArgs.filter);
+      if (filterProps.length === 1) {
+        const filterProp = filterProps[0]
+        // console.log('2/5 there is exactly one filter', filterProps, args.queryArgs.filter[filterProp])
+        if (filterProp === 'fields') {
+          // console.log('3/5 there is a fields', [filterProp, args.queryArgs.filter.fields])
+          const fields = Object.getOwnPropertyNames(args.queryArgs.filter.fields);
+          if (fields.length === 1) {
+            const fieldName = fields[0];
+            const fieldFilters = Object.getOwnPropertyNames(args.queryArgs.filter.fields[fieldName]);
+            // console.log('4/5 there is exactly one field', [filterProp, fields, fieldName, args.queryArgs.filter.fields[fieldName], fieldFilters])
+            if (fieldFilters.length === 1 && fieldFilters[0] === 'eq') {
+              let targetValue = args.queryArgs.filter.fields[fieldName].eq
+              // console.log('5/5 There is exactly one eq for this field so lets go!', [fieldFilters, targetValue]);
+
+              //typeof args.queryArgs.filter?.id?.eq === `string`
+              const { ensureIndexByTypedField, getNodesByTypedField } = require(`./nodes`)
+
+              // console.log('setting up index')
+              ensureIndexByTypedField(fieldName, nodeTypeNames)
+
+              // console.log('########### for k/v:', fieldName, '/', targetValue)
+
+              // console.log('doing fetch now')
+              const nodesByKeyValue = getNodesByTypedField(fieldName, targetValue, nodeTypeNames)
+              // console.log('field =', fieldName, ', value =', targetValue, ', found -->', nodesByKeyValue);
+              if (nodesByKeyValue?.size > 0) {
+                shortcut = [...nodesByKeyValue]
+                return shortcut
+              } else {
+                shortcut = undefined
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error(e.stack)
+    throw new Error(e)
+  }
+
+
   if (
     args.queryArgs?.filter &&
     Object.getOwnPropertyNames(args.queryArgs.filter).length === 1 &&
@@ -148,7 +202,23 @@ const runSift = (args: Object) => {
 
   nodeTypeNames.forEach(typeName => addResolvedNodes(typeName, nodes))
 
-  return runSiftOnNodes(nodes, args, getNode)
+  let actual = runSiftOnNodes(nodes, args, getNode)
+
+  // if (args.queryArgs?.filter && actual) {
+  //   console.log('->', actual[0])
+  //   console.log('------')
+  //   console.log('=>', shortcut?.[0])
+  //   console.log('###########')
+  //   console.log(actual?.[0] === shortcut?.[0])
+  //   console.log('########### actual')
+  //   console.log(actual?.length, nodeTypeNames);
+  //   console.log('########### shortcut')
+  //   console.log(shortcut?.length);
+  //   console.log('########### hard exit')
+  //   process.exit()
+  // }
+
+  return actual
 }
 
 exports.runSift = runSift

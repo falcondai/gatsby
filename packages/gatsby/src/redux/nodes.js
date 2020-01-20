@@ -154,3 +154,95 @@ const addResolvedNodes = (typeName, arr) => {
 }
 
 exports.addResolvedNodes = addResolvedNodes
+
+let mappedByKey
+
+const ensureIndexByTypedKey = (key, nodeTypeNames) => {
+  const isField = key.startsWith("fields/")
+  const sanitizedKey = (isField ? key.slice('fields/'.length) : key)
+  key = nodeTypeNames.join(',') + '/' + key;
+
+  const {nodes, resolvedNodesCache} = store.getState()
+
+  if (!mappedByKey) {
+    mappedByKey = new Map
+  }
+
+  let byKeyValue = mappedByKey.get(key)
+  if (byKeyValue) {
+    return
+  }
+
+  byKeyValue = new Map() // Map<node.value, Set<all nodes with this value for this key>>
+  mappedByKey.set(key, byKeyValue)
+
+console.log('starting looop for', sanitizedKey, key)
+  let x = true
+  nodes.forEach((node, id) => {
+    if (!nodeTypeNames.includes(node.internal.type)) {
+      return
+    }
+
+    // console.log('id=',id)
+    // if (x) {
+    //   console.log('first node:', node)
+    //   x = false
+    // }
+    // console.log('getting v')
+
+    let v = isField ? node.fields?.[sanitizedKey] : node[sanitizedKey]
+    if (v === undefined) {
+      // console.log(' --- did not have value')
+      return;
+    }
+
+    // console.log('getting set')
+    let set = byKeyValue.get(v)
+    // console.log('checking set')
+    if (!set) {
+      set = new Set()
+      byKeyValue.set(v, set)
+    }
+    // console.log('setting node')
+    set.add(node)
+
+    if (!node.__gatsby_resolved) {
+      const typeName = node.internal.type;
+      const resolvedNodes = resolvedNodesCache.get(typeName)
+      node.__gatsby_resolved = resolvedNodes?.get(node.id)
+    }
+  })
+
+  // console.log('--> mappedByKey', mappedByKey)
+}
+
+exports.ensureIndexByTypedKey = ensureIndexByTypedKey
+
+const ensureIndexByTypedField = (fieldName, nodeTypeNames) => ensureIndexByTypedKey("fields/" + fieldName, nodeTypeNames)
+
+exports.ensureIndexByTypedField = ensureIndexByTypedField
+
+const getNodesByTypedKey = (key, value, nodeTypeNames) => {
+  if (key === "id") {
+    const node = getNode(value)
+
+    if (nodeTypeNames.includes(value.internal.type)) {
+      return node
+    }
+
+    return undefined
+  }
+
+  key = nodeTypeNames.join(',')+'/'+key;
+
+  let byKey = mappedByKey?.get(key)
+
+  // console.log('by key', key, '-->', byKey)
+  //
+  // console.log('by value', value, '->', byKey?.get(value))
+  return byKey?.get(value)
+}
+
+const getNodesByField = (fieldName, fieldValue, nodeTypeNames) => getNodesByTypedKey(`fields/${fieldName}`, fieldValue, nodeTypeNames)
+
+exports.getNodesByTypedField = getNodesByField
