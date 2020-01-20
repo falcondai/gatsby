@@ -301,6 +301,7 @@ module.exports = ({
   name = null,
   reporter,
 }) => {
+  console.log(`create remote file`, url)
   // validation of the input
   // without this it's notoriously easy to pass in the wrong `createNodeId`
   // see gatsbyjs/gatsby#6643
